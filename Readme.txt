@@ -1,4 +1,4 @@
-﻿TVTest NXKakolog Plugin ver.1.0
+﻿TVTest NXKakolog Plugin ver.1.1
 
 ■概要
 「ニコニコ実況 過去ログ API」( https://jikkyo.tsukumijima.net/ )から実況のログを
@@ -20,6 +20,8 @@ TVTestのプラグインフォルダにNXKakolog.tvtpを入れてください。
 の場合はログの時刻をそのまま、「取得(現在位置で再生)」の場合は現在の再生位置にロ
 グの時刻をずらして(NicoJKの「Rel」ボタンに相当)NicoJKで再生します。
 再生終了はNicoJKの「File」ボタンを押してください。
+プラグインの有効化や「取得」ボタンはTVTestのキー割り当てやサイドバーに設定してお
+くと便利です。
 
 ファイル再生プラグインがTvtPlay( https://github.com/xtne6f/TvtPlay )の場合はファ
 イル情報をもとに日付時刻や長さを自動設定します。
