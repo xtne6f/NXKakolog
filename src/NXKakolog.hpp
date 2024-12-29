@@ -29,6 +29,7 @@ private:
     static BOOL CALLBACK StreamCallback(BYTE *pData, void *pClientData);
 
     HWND m_hDlg;
+    bool m_fCheckSetStreamCallback;
     int m_openFlag;
     CJKStream m_getStream;
     std::vector<char> m_getBuf;

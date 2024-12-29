@@ -23,6 +23,7 @@ enum {
 
 CNXKakolog::CNXKakolog()
     : m_hDlg(nullptr)
+    , m_fCheckSetStreamCallback(false)
     , m_openFlag(0)
     , m_totTime(-1)
 {
@@ -66,9 +67,6 @@ bool CNXKakolog::Initialize()
 
     // イベントコールバック関数を登録
     m_pApp->SetEventCallback(EventCallback, this);
-
-    // ストリームコールバックを登録
-    m_pApp->SetStreamCallback(0, StreamCallback, this);
     return true;
 }
 
@@ -135,8 +133,50 @@ bool CNXKakolog::CheckPlaying()
     if (year < 0 || month < 0 || day < 0 || hour < 0 || minute < 0 || hourSpan < 0 || minuteSpan < 0) {
         // TvtPlayが現在開いているファイルの時刻や長さを調べる
         HWND hwndTvtp = FindTvtPlayFrame();
-        if (hwndTvtp && SendMessage(hwndTvtp, WM_TVTP_GET_MSGVER, 0, 0) >= TVTP_CURRENT_MSGVER) {
-            int totTime = static_cast<int>(SendMessage(hwndTvtp, WM_TVTP_GET_TOT_TIME, 0, 0));
+        int ver;
+        if (hwndTvtp && (ver = static_cast<int>(SendMessage(hwndTvtp, WM_TVTP_GET_MSGVER, 0, 0))) >= TVTP_REQUIRED_MSGVER) {
+            int totTime = -1;
+            LONGLONG llft = -1;
+            if (ver >= TVTP_TOT_UNIX_MSGVER) {
+                // TOTの日付まで得られる
+                unsigned int totUnixTime = static_cast<unsigned int>(SendMessage(hwndTvtp, WM_TVTP_GET_TOT_UNIX, 0, 0));
+                if (totUnixTime) {
+                    totUnixTime += 9 * 3600;
+                    totTime = totUnixTime % (24 * 3600) * 1000;
+                    if (year < 0 || month < 0 || day < 0) {
+                        llft = UnixTimeToFileTime(totUnixTime);
+                    }
+                }
+            }
+            else {
+                // ストリームコールバックを登録
+                if (!m_fCheckSetStreamCallback) {
+                    m_pApp->SetStreamCallback(0, StreamCallback, this);
+                }
+                totTime = static_cast<int>(SendMessage(hwndTvtp, WM_TVTP_GET_TOT_TIME, 0, 0));
+                if (totTime >= 0 && (year < 0 || month < 0 || day < 0)) {
+                    // TvtPlayから得られるのはTOTの「時刻」だけなのでストリームコールバックで得た日付と合成する
+                    int position = static_cast<int>(SendMessage(hwndTvtp, WM_TVTP_GET_POSITION, 0, 0));
+                    if (position >= 0) {
+                        lock_recursive_mutex lock(m_totLock);
+                        if (m_totTime >= 0) {
+                            llft = m_totTime - position * FILETIME_MILLISECOND;
+                            // ファイルのTOTが23時以上/1時未満でストリームコールバックから逆算したTOTが1時未満/23時以上のときは
+                            // 誤差が日を跨いでしまったものとして補正する
+                            if (totTime / 3600000 >= 23 && llft / (3600000 * FILETIME_MILLISECOND) % 24 < 1) {
+                                // 前日にする
+                                llft -= 3600000 * FILETIME_MILLISECOND;
+                            }
+                            else if (totTime / 3600000 < 1 && llft / (3600000 * FILETIME_MILLISECOND) % 24 >= 23) {
+                                // 翌日にする
+                                llft += 3600000 * FILETIME_MILLISECOND;
+                            }
+                        }
+                    }
+                }
+            }
+            m_fCheckSetStreamCallback = true;
+
             if (totTime >= 0) {
                 if (hour < 0) {
                     hour = totTime / 3600000 % 24;
@@ -161,31 +201,15 @@ bool CNXKakolog::CheckPlaying()
                         }
                     }
                 }
-                if (year < 0 || month < 0 || day < 0) {
-                    // TvtPlayから得られるのはTOTの「時刻」だけなのでストリームコールバックで得た日付と合成する
-                    int position = static_cast<int>(SendMessage(hwndTvtp, WM_TVTP_GET_POSITION, 0, 0));
-                    FILETIME ft = {};
-                    if (position >= 0) {
-                        lock_recursive_mutex lock(m_totLock);
-                        if (m_totTime >= 0) {
-                            LONGLONG llft = m_totTime - position * FILETIME_MILLISECOND;
-                            // ファイルのTOTが23時以上/1時未満でストリームコールバックから逆算したTOTが1時未満/23時以上のときは
-                            // 誤差が日を跨いでしまったものとして補正する
-                            if (totTime / 3600000 >= 23 && llft / (3600000 * FILETIME_MILLISECOND) % 24 < 1) {
-                                // 前日にする
-                                llft -= 3600000 * FILETIME_MILLISECOND;
-                            }
-                            else if (totTime / 3600000 < 1 && llft / (3600000 * FILETIME_MILLISECOND) % 24 >= 23) {
-                                // 翌日にする
-                                llft += 3600000 * FILETIME_MILLISECOND;
-                            }
-                            ft.dwLowDateTime = static_cast<DWORD>(llft);
-                            ft.dwHighDateTime = static_cast<DWORD>(llft >> 32);
-                        }
-                    }
+            }
+            if (llft >= 0) {
+                FILETIME ft;
+                ft.dwLowDateTime = static_cast<DWORD>(llft);
+                ft.dwHighDateTime = static_cast<DWORD>(llft >> 32);
+                SYSTEMTIME st;
+                if (FileTimeToSystemTime(&ft, &st)) {
                     int yearRange = static_cast<int>(SendDlgItemMessage(m_hDlg, IDC_COMBO_YEAR, CB_GETCOUNT, 0, 0));
-                    SYSTEMTIME st;
-                    if (ft.dwHighDateTime > 0 && FileTimeToSystemTime(&ft, &st) && st.wYear >= 2009 && st.wYear < 2009 + yearRange) {
+                    if (st.wYear >= 2009 && st.wYear < 2009 + yearRange) {
                         if (year < 0) {
                             year = st.wYear - 2009;
                             SendDlgItemMessage(m_hDlg, IDC_COMBO_YEAR, CB_SETCURSEL, year, 0);
@@ -454,6 +478,19 @@ LRESULT CALLBACK CNXKakolog::EventCallback(UINT Event, LPARAM lParam1, LPARAM lP
     case TVTest::EVENT_PLUGINENABLE:
         // プラグインの有効状態が変化した
         return lParam1 ? this_.EnablePlugin() : this_.DisablePlugin();
+    case TVTest::EVENT_SERVICEUPDATE:
+        // サービスの構成が変化した
+        if (!this_.m_fCheckSetStreamCallback) {
+            HWND hwndTvtp = FindTvtPlayFrame();
+            if (hwndTvtp) {
+                // 必要ならストリームコールバックを登録
+                if (SendMessage(hwndTvtp, WM_TVTP_GET_MSGVER, 0, 0) < TVTP_TOT_UNIX_MSGVER) {
+                    this_.m_pApp->SetStreamCallback(0, StreamCallback, &this_);
+                }
+                this_.m_fCheckSetStreamCallback = true;
+            }
+        }
+        break;
     case TVTest::EVENT_FULLSCREENCHANGE:
         // 全画面表示状態が変化した
         if (this_.m_hDlg) {

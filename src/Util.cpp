@@ -11,6 +11,11 @@ DWORD GetLongModuleFileName(HMODULE hModule, LPTSTR lpFileName, DWORD nSize)
     return 0;
 }
 
+LONGLONG UnixTimeToFileTime(unsigned int tm)
+{
+    return tm * 10000000LL + 116444736000000000;
+}
+
 unsigned int FileTimeToUnixTime(LONGLONG ll)
 {
     return static_cast<unsigned int>((ll - 116444736000000000) / 10000000);
