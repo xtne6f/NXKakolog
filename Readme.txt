@@ -1,4 +1,4 @@
-﻿TVTest NXKakolog Plugin ver.1.1
+﻿TVTest NXKakolog Plugin ver.1.2
 
 ■概要
 「ニコニコ実況 過去ログ API」( https://jikkyo.tsukumijima.net/ )から実況のログを

@@ -9,7 +9,7 @@ const UINT WM_APP_STREAM = WM_APP;
 const UINT WM_APP_SET_ZORDER = WM_APP + 1;
 
 const TCHAR INFO_PLUGIN_NAME[] = TEXT("NXKakolog");
-const TCHAR INFO_DESCRIPTION[] = TEXT("過去ログAPIから実況のログを取得 (ver.1.1)");
+const TCHAR INFO_DESCRIPTION[] = TEXT("過去ログAPIから実況のログを取得 (ver.1.2)");
 
 enum {
     TIMER_ID_CHECK_PLAYING,
